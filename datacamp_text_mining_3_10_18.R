@@ -19,18 +19,20 @@ setwd("/Users/callumrichards/Documents/Careers/ThamesWater_September2018/TW_EV_S
 library(qdap)
 library(tm)
 library(ggplot2)
-
+library(wordcloud)
+library(viridisLite)
+library(lubridate)
+library(dplyr)
+library(plotrix) # required to build pyramid plots
 
 # packages from previous twitter analysis
 library(twitteR)
 library(syuzhet)
 library(SnowballC)
-library(dplyr)
 library(readr)
 library(stringi)
 library(textclean)
 library(plotly)
-library(wordcloud)
 library(pacman)
 library(sentimentr)
 library(magrittr)
@@ -290,7 +292,7 @@ clean_corpus <- function(corpus) {
   corpus <- tm_map(corpus, content_transformer(tolower))
   # Add more stopwords - IMPORTANT that these are being removed
   stopwords("en")
-  corpus <- tm_map(corpus, removeWords, c(stopwords("en"), "coffee", "mug"))
+  corpus <- tm_map(corpus, removeWords, c(stopwords("en")))
   # Strip whitespace
   corpus<-tm_map(corpus,stripWhitespace)
   # remove all text within brackets
@@ -431,7 +433,7 @@ clean_corpus <- function(corpus) {
   # Transform to lower case
   corpus <- tm_map(corpus, content_transformer(tolower))
   # Add more stopwords - IMPORTANT that these are being removed
-  corpus <- tm_map(corpus, removeWords, c(stopwords("en"), "coffee", "mug"))
+  corpus <- tm_map(corpus, removeWords, c(stopwords("en")))
   # Strip whitespace
   corpus<-tm_map(corpus,stripWhitespace)
   # remove all text within brackets
@@ -488,4 +490,276 @@ barplot(term_frequency[1:10], col="tan", las=2)
 # and faster way to get frequent terms is via qdap
 # qdap has its own list of stop words that differ from those in tm
 # function accepts a text variable, can specify the top number of terms to show with the top argument, 
-# a vector of stop words to remove with the stopwords argument, and the minimum character length of a word to be included with the at.least argument. 
+# a vector of stop words to remove with the stopwords argument and the minimum character length 
+# of a word to be included with the at.least argument. 
+# Create frequency
+frequency <- freq_terms(
+  tweet_df_cleaned$text, 
+  top = 10, # limit to top 10 terms
+  at.least = 3, # at least 3 letters per term
+  stopwords = "Top200Words" # dictionary of defined stop words
+)
+stopwords(Top200Words)
+# Make a frequency barchart - calling plot() on freq_terms() object
+plot(frequency)
+
+# now create a frequency plot with a different stopwords - from english dictionary
+frequency2 <- freq_terms(
+  tweet_df_cleaned$text, 
+  top = 10, # limit to top 10 terms
+  at.least = 3, # at least 3 letters per term
+  stopwords("english") # dictionary of defined stop words
+)
+stopwords("english")
+# Make a another frequency barchart
+plot(frequency2, col="blue")
+# better/more extensive suite of stopwords
+
+# Word clouds
+# 'Visually engaging' - but personally do not like them as they are not very quantative 
+# and can easily give misleading messages behind the data
+
+# simply wordcloud - size of words ~ frequency
+# importance of prepreocessing text and selecting appropriate stopwords is still important
+# eg adjust clean_corpus function so you can identify proper nouns etc
+# eg or remove very very common words that do no reveal much insight eg water,
+# that can mask underlying insight from other word patterns (like an outlier)
+#so can adjust function to remove the words you 'expect'
+
+# Print the first 10 entries in term_frequency
+term_frequency[1:10]
+#Extract the terms using names() on term_frequency. Call the vector of strings terms_vec.
+terms_vec<-names(term_frequency)
+# construct wordcloud - using terms_vec as the words, and term_frequency as the values. 
+# Add the parameters max.words = 50 and colors = "red", and can adjust, to custommize the cloud
+wordcloud(terms_vec, term_frequency, max.words=50, colors="red")
+
+# word cloud clean up
+# Review a "cleaned" tweet - using content() to show you a specific tweet for comparison. 
+content(clean_tweets_corp[[11]])
+# indicates that '&' has been coded as 'amp' - and it is coming up in the word cloud
+# so this, along with water, should maybe be included in our list of stop words
+# Add to stopwords
+stops <- c(stopwords(kind = 'en'), 'water', 'amp')
+# Review last 6 stopwords 
+tail(stops) # 'water' and 'amp' no included
+# Apply to a corpus to form a cleaned_tweets_corp_2 with tm_map() by passing in the cleaned_tweets_corp, 
+# the function removeWords and finally the stopwords, stops.
+clean_tweets_corp_2 <- tm_map(clean_tweets_corp, removeWords, stops)
+# Review a "cleaned" tweet again
+content(clean_tweets_corp_2[[11]])
+# remove unnecc. whitespaces again procued from removal of words
+clean_tweets_corp_2<-tm_map(clean_tweets_corp_2,stripWhitespace)
+content(clean_tweets_corp_2[[11]])
+
+# now have updated 'cleaned' corpus - so build improved word cloud
+# convert to tdm
+tweets_tdm_2<-TermDocumentMatrix(clean_tweets_corp_2)
+# Print tweets_tdm data
+tweets_tdm_2
+# Convert coffee_tdm to a matrix: coffee_m
+tweets_m3<-as.matrix(tweets_tdm_2)
+# produce a name vector 
+term_frequency_2<-rowSums(tweets_m3)
+# Sort into descending order
+sorted_tweet_words<-sort(term_frequency_2, decreasing=TRUE) 
+# Print the 10 most frequent terms
+sorted_tweet_words[1:10]
+# Get a terms vector
+terms_vec_2<-names(sorted_tweet_words)
+# Create a wordcloud for the values in word_freqs
+wordcloud(terms_vec_2, sorted_tweet_words, # can also use term_frequency_2 to get unordered word list 
+             max.words = 50, colors = "red", fixed.asp=TRUE, rot.per=0)
+
+help(wordcloud)
+
+# improving the appearance of word clouds
+# can further specifiy colours, using vector of named colours
+# reference: https://www.google.com/url?sa=t&rct=j&q=&esrc=s&source=web&cd=2&ved=2ahUKEwi5p-iO0oDeAhWoLcAKHQfCBMoQFjABegQIBxAC&url=http%3A%2F%2Fwww.stat.columbia.edu%2F~tzheng%2Ffiles%2FRcolor.pdf&usg=AOvVaw1XIn-mwZ73RgG8bxh4Lan4
+# eg use "grey80", "darkgoldenrod1", and "tomato" - best practice to start with three colors,
+# each with increasing vibrancy, helping to naturally divide the term frequency into "low", 
+# "medium" and "high" for easier viewing.
+wordcloud(terms_vec_2, sorted_tweet_words,
+          max.words=100, 
+          colors= c("grey80","darkgoldenrod1", "tomato"))
+# or can use viridisLite package to pick perceptually-uniform colours pallete for you 
+# There are multiple color palettes each with a convenience function - specify n to select the number of colors needed.
+# and each function returns a vector of hexadecimal colors based on n.eg
+# Select 5 colors 
+color_pal<-cividis(n=5)
+# Examine the palette output
+color_pal
+
+wordcloud(terms_vec_2, sorted_tweet_words,
+          max.words=100, 
+          colors= color_pal)
+
+  ### COMPARISON WORDCLOUDS AND PYRAMID PLOTS
+
+# COMMONALITY WORDCLOUDS - shared words, ' conjunction' in the venn diagram
+
+# load in data covering period between 28/9/18 - 12/10/18
+# containing tweets from focal period of 2/10/18 - 3/10/18 between which main burst occured
+# at Lea bridge road #E3
+
+# CLEAR the environment for this new stagecof the analysis
+rm(list = ls())
+
+getwd()
+setwd("/Users/callumrichards/Documents/Careers/ThamesWater_September2018/TW_EV_Social/Data")
+
+tweet_df_oct<-read.csv('tweets_1_10_18-12_10_18.csv', stringsAsFactors = FALSE,skip=50, sep=",")[ ,1:28]
+# 'stringsAsFactors ensures that string or characters are not automatically converted to a factor variable
+attach(tweet_df_oct)
+
+# Convert 'Created.At' column to timestamp of each tweet in a readable format
+colnames(tweet_df_oct)[colnames(tweet_df_oct)=="Created At"] <- "Created.At"
+format.str <- "%a %b %d %H:%M:%S %z %Y"
+tweet_df_oct$timestamp<-as.POSIXct(strptime(tweet_df_oct[,"Created.At"], format.str, tz = "GMT"), tz = "GMT")
+attach(tweet_df_oct)
+length(timestamp)
+
+# remove uneccessary columns that are a bit overkill for R - using subsetting
+cleaned_tweets_oct<- subset(tweet_df_oct, select = -c(Screen.Name,Created.At,Links, Language,
+                                                 Source, Domain, URL, Tweet.Link, Pic.Link,
+                                                 Retweeting.User, Retweeting.Handle, Tweet.ID) )
+# move 'timestamp' column to 1st column in subset
+cleaned_tweets_oct<-cleaned_tweets_oct[,c(17,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16)]
+
+# from clean_tweets with tweet specific cleaning operations
+# Replace blank space (“rt”) # removes rt, but does not completely remove retweeted tweets
+cleaned_tweets_oct$clean_tweets <- gsub("rt", "", Tweet)
+# Replace @UserName
+cleaned_tweets_oct$clean_tweets  <- gsub("@\\w+", "", cleaned_tweets_oct$clean_tweets )
+# Remove punctuation
+cleaned_tweets_oct$clean_tweets <- gsub("[[:punct:]]", "", cleaned_tweets_oct$clean_tweets)
+# Remove links
+cleaned_tweets_oct$clean_tweets <- gsub("http\\w+", "", cleaned_tweets_oct$clean_tweets)
+# Remove blank spaces at the beginning
+cleaned_tweets_oct$clean_tweets <- gsub("^ ", "", cleaned_tweets_oct$clean_tweets)
+# Remove blank spaces at the end
+cleaned_tweets_oct$clean_tweets <- gsub(" $", "", cleaned_tweets_oct$clean_tweets)
+# remove emojis or special characters 
+## !!!! this also removed hashtags - so if you want to keep hashtags in then find a different function
+cleaned_tweets_oct$clean_tweets <- gsub('<.*>', '', enc2native(cleaned_tweets_oct$clean_tweets))
+# also remove instances where users have embedded pictures and left pic address
+cleaned_tweets_oct$clean_tweets <- gsub("pictwitter.*", '', cleaned_tweets_oct$clean_tweets)
+# #convert all text to lower case
+cleaned_tweets_oct$clean_tweets <- tolower(cleaned_tweets_oct$clean_tweets)
+attach(cleaned_tweets_oct)
+# move 'clean_tweets' to 3rd column 
+cleaned_tweets_oct<-cleaned_tweets_oct[,c(1,2,18,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17)]
+# df now ready for conversion to corpus
+
+
+# subset data to only produce tweets across 2 days, into seperate dataframes from which
+# you can form comparison corpura
+str(cleaned_tweets_oct)
+# tweets from 2018-10-02
+tweets_02 <- subset(cleaned_tweets_oct, timestamp >= as.POSIXct('2018-10-02 00:00:00', tz="UTC") &
+                  timestamp <= as.POSIXct('2018-10-02 23:59:59', tz="UTC"))
+# tweets from 2018-10-03
+tweets_03 <- subset(cleaned_tweets_oct, timestamp >= as.POSIXct('2018-10-03 00:00:00', tz="UTC") &
+                  timestamp <= as.POSIXct('2018-10-03 23:59:59', tz="UTC"))
+### at first glance we can already see that there were far more tweets to @thameswater on 
+# 3/10 (506 obs) vs 2/10 (140 obs) - already an indication that something interesting is happening
+
+
+# Combine our 'corpora' and the text columns
+all_02<-paste(tweets_02$clean_tweets, collapse = "")
+all_03<-paste(tweets_03$clean_tweets, collapse = "")
+
+# Concatenate two together
+all_tweets <- c(all_02, all_03)
+# Convert to corpus
+all_tweets <- VectorSource(all_tweets)
+all_corpus <- VCorpus(all_tweets)
+# clean according to your clean_corupus function
+
+clean_corpus <- function(corpus) {
+  # Remove punctuation
+  corpus <- tm_map(corpus, removePunctuation)
+  # Transform to lower case
+  corpus <- tm_map(corpus, content_transformer(tolower))
+  # Add more stopwords - IMPORTANT that these are being removed
+  corpus <- tm_map(corpus, removeWords, c(stopwords("en"), 'water','amp'))
+  # Strip whitespace
+  corpus<-tm_map(corpus,stripWhitespace)
+  # remove all text within brackets
+  corpus<-tm_map(corpus, content_transformer(bracketX))
+  # convert contractions back to their base words eg shouldn't = should not
+  corpus<-tm_map(corpus, content_transformer(replace_contraction))
+  return(corpus) 
+}
+
+  
+all_clean <- clean_corpus(all_corpus)
+
+# since you collapsed the document to two columns in the tdm, simply change it to a matrix
+# and pass it to the commonality cloud function, WITHOUT using rowsums()
+all_tdm <- TermDocumentMatrix(all_clean)
+all_m <- as.matrix(all_tdm)
+
+# Make commonality cloud - subsetting the terms to only words that are shared between corpura
+commonality.cloud(all_m, colors = "steelblue1", max.words = 100)
+# 
+
+# COMPARISON CLOUD - IE where text between two days differs - 'disjunction' in the venn diagram
+
+all_02_2<-paste(tweets_02$clean_tweets, collapse = "")
+all_03_2<-paste(tweets_03$clean_tweets, collapse = "")
+
+# Concatenate two together
+all_tweets_2 <- c(all_02_2, all_03_2)
+# Convert to corpus
+all_tweets_2 <- VectorSource(all_tweets_2)
+all_corpus_2 <- VCorpus(all_tweets_2)
+all_clean_2 <- clean_corpus(all_corpus_2)
+all_tdm_2 <- TermDocumentMatrix(all_clean_2)
+# but once organised into a tdm you should explicitly define the column names
+# in colnames and pass in a vector of names
+colnames(all_tdm_2) <- c("2nd Oct", "3rd Oct")
+# convert to matrix and pass to comparison cloud with some aesthetics, identifying the words
+# that are dissimilar, 
+all_m_2 <- as.matrix(all_tdm_2)
+
+# Make comparison cloud
+comparison.cloud(all_m_2,colors = c("orange", "blue"), max.words = 50, 
+                 title.size = 2, match.colors = FALSE, title.bg.color='white')
+# clear pattern of 'flood', 'burst', 'pipe' etc appearing far more post event on 03_10 vs 02_10
+# but this is not ordered by word frequency -  pyramid help with this?
+help(comparison.cloud)
+
+  ###   PYRAMID PLOT
+# can also use a polarized tag plot to analyze the conjunction between two corpura, using 
+# a pyramid plot
+
+# instead of passing the matrix to wordcloud, you can subset it to identify the terms that both
+# documents share
+# Identify terms shared by both documents
+common_words <- subset(all_m,
+  all_m[, 1] > 0 & all_m[, 2] > 0
+)
+# Find most commonly shared words - calculate absolute difference between the common words
+# order by the difference
+difference <- abs(common_words[, 1] - common_words[, 2])
+common_words <- cbind(common_words, difference)
+common_words <- common_words[order(common_words[, 3],
+                                     decreasing = TRUE), ]
+# make a small top terms df 
+top25_df <- data.frame(x = common_words[1:25, 1],
+                         y = common_words[1:25, 2],
+                         labels = rownames(common_words[1:25, ]))
+# pass top 25 terms into the plot.df function along with some aesthetics
+pyramid.plot(top25_df$x, top25_df$y,
+             labels = top25_df$labels, 
+             main = "Words in Common",
+             gap = 12, unit = NULL, lxcol="tan", rxcol="steelblue1",
+             top.labels = c("2nd Oct",
+                            "Words",
+                            "3rd Oct"))
+help("pyramid.plot")
+
+# Create word network with word.associate (function does most things for you - basic pre-processing
+# and adjusting the ajaceny network of connections)
+
